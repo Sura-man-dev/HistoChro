@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f5dda9"/><stop offset="1" stop-color="#c18b3c"/></linearGradient></defs>
+  <rect width="64" height="64" rx="18" fill="#111313"/>
+  <rect x="3" y="3" width="58" height="58" rx="16" fill="none" stroke="url(#g)" stroke-width="2"/>
+  <text x="32" y="39" text-anchor="middle" font-family="Georgia,serif" font-size="21" font-weight="700" letter-spacing="-2" fill="url(#g)">CH</text>
+</svg>

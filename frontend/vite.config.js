@@ -1,0 +1,24 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      "/api": "http://127.0.0.1:8000",
+      "/uploads": "http://127.0.0.1:8000",
+    },
+  },
+  build: {
+    // Three.js is loaded separately and is 192 KB compressed; allow its larger raw module.
+    chunkSizeWarningLimit: 800,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("/node_modules/three/")) return "three";
+          if (id.includes("/node_modules/@react-three/fiber/")) return "react-three-fiber";
+        },
+      },
+    },
+  },
+});
