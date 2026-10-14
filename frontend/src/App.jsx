@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import MemberHome from "./sections/MemberHome.jsx";
+import { HISTORY_EVENTS, HistoryEventDetail } from "./sections/HistoryPages.jsx";
 
 const HeroScene3D = lazy(() => import("./HeroScene.jsx"));
 
@@ -15,8 +16,8 @@ const IMAGES = {
 };
 
 const HERO_STORIES = [
-  { image: img("photo-1539650116574-8efeb43e2750", 2000), place: "GIZA · EGYPT", title: "Where the ancient world reached for the sky", date: "c. 2560 BC", note: "The Great Pyramid rises" },
   { image: img("photo-1524492412937-b28074a5d7da", 2000), place: "AGRA · INDIA", title: "A monument built to outlast a lifetime", date: "1632 AD", note: "The Taj Mahal takes shape" },
+  { image: img("photo-1539650116574-8efeb43e2750", 2000), place: "GIZA · EGYPT", title: "Where the ancient world reached for the sky", date: "c. 2560 BC", note: "The Great Pyramid rises" },
   { image: img("photo-1552832230-c0197dd311b5", 2000), place: "ROMA · ITALY", title: "An empire leaves its mark on the world", date: "80 AD", note: "The Colosseum opens" },
   { image: img("photo-1516026672322-bc52d61a55d5", 2000), place: "LALIBELA · ETHIOPIA", title: "Faith and artistry carved into living stone", date: "12th century", note: "The rock-hewn churches" },
 ];
@@ -54,20 +55,9 @@ const FEATURES = [
   },
 ];
 
-const ERAS = {
-  Ancient: [
-    { year: "2560 BC", title: "The Great Pyramid is completed", text: "Built for Pharaoh Khufu, it stays the tallest man-made structure for nearly 4,000 years.", img: IMAGES.egypt },
-    { year: "80 AD", title: "The Colosseum opens in Rome", text: "100 days of games inaugurate the largest amphitheatre ever built.", img: IMAGES.rome },
-  ],
-  Medieval: [
-    { year: "1215", title: "Magna Carta is sealed", text: "A charter that limits the power of the king and echoes through modern law.", img: IMAGES.book },
-    { year: "1325", title: "Mansa Musa's pilgrimage", text: "The Mali emperor's journey to Mecca reshapes the world's view of Africa's wealth.", img: IMAGES.egypt },
-  ],
-  Modern: [
-    { year: "1632", title: "The Taj Mahal begins", text: "A monument to love rises in Agra, taking 20 years and 20,000 workers.", img: IMAGES.india },
-    { year: "1969", title: "Humans walk on the Moon", text: "Apollo 11 turns one small step into a giant leap for humankind.", img: IMAGES.hero },
-  ],
-};
+const ERAS = Object.fromEntries(
+  ["Ancient", "Medieval", "Modern"].map((era) => [era, HISTORY_EVENTS.filter((event) => event.era === era)])
+);
 
 const FEED = [
   { user: "Selam T.", handle: "@selam_history", time: "2h", era: "Ancient", text: "Did you know the Aksumite Empire minted its own gold coins 1,700 years ago? 🪙", img: IMAGES.egypt, likes: "2.4k", comments: 318 },
@@ -81,7 +71,7 @@ const TESTIMONIALS = [
   { name: "Lena S.", role: "Museum guide", quote: "Book Mode feels like a living museum in my pocket. Beautiful and easy." },
 ];
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
 
 function BrandMark() {
   return <img className="logo__mark" src="/favicon.svg" alt="" aria-hidden="true" />;
@@ -112,12 +102,12 @@ async function authRequest(path, body) {
     }
     if (typeof data?.detail === "string" && data.detail.trim()) {
       if (response.status >= 500 && data.detail === "Internal Server Error") {
-        throw new Error("Chronicle's API is running, but a server error occurred. Check the backend terminal for the Neon database connection error.");
+        throw new Error("Chronicle's API encountered a server error. Check the backend terminal for the traceback; database, Google, and upload errors have separate messages.");
       }
       throw new Error(data.detail);
     }
     if (response.status >= 500 && !data) {
-      throw new Error("Chronicle's API returned an unreadable server response. Check that the backend is running at 127.0.0.1:8000, then review its terminal for the specific error.");
+      throw new Error(`Chronicle's API returned a non-JSON server response (HTTP ${response.status}). Check the backend terminal for the specific error and restart the API if needed.`);
     }
     if (response.status >= 500) {
       throw new Error("The account service couldn't complete your request. Check the backend terminal for the database error, then try again.");
@@ -334,6 +324,30 @@ function Counter({ to, suffix = "" }) {
 function Nav({ user, onLogout }) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const firstName = user?.name?.trim().split(/\s+/)[0] || "Historian";
+  const isLandingPage = window.location.pathname === "/";
+  const profileMenu = (
+    <div className="nav-profile-wrap">
+      <button
+        type="button"
+        className="nav-profile-button"
+        aria-haspopup="menu"
+        aria-expanded={profileOpen}
+        onClick={() => setProfileOpen((value) => !value)}
+      >
+        <span className="nav-profile-avatar">{firstName[0].toUpperCase()}</span>
+        <span className="nav-profile-name">{firstName}</span>
+        <span className="nav-profile-chevron" aria-hidden="true">⌄</span>
+      </button>
+      {profileOpen && (
+        <div className="nav-profile-menu" role="menu">
+          <div className="nav-profile-details"><strong>{user?.name}</strong><small>{user?.email}</small></div>
+          <button type="button" role="menuitem" onClick={onLogout}>Sign out</button>
+        </div>
+      )}
+    </div>
+  );
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 40);
     on();
@@ -342,22 +356,22 @@ function Nav({ user, onLogout }) {
   }, []);
   return (
     <header className={`nav ${scrolled ? "nav--solid" : ""}`}>
-      <a href="#top" className="logo">
+      <a href={isLandingPage ? "#top" : "/"} className="logo">
         <BrandMark /> Chronicle
       </a>
-      <nav className={`nav__links ${open ? "open" : ""}`} onClick={() => setOpen(false)}>
-        <a href="#features">Features</a>
-        <a href="#timeline">Timeline</a>
-        <a href="#feed">Community</a>
-        <a href="#book">Book Mode</a>
+      <nav className={`nav__links ${open ? "open" : ""}`} onClick={(event) => { if (event.target.closest("a")) setOpen(false); }}>
+        <a href={isLandingPage ? "#features" : "/#features"}>Features</a>
+        <a href={isLandingPage ? "#timeline" : "/#timeline"}>Timeline</a>
+        <a href={isLandingPage ? "#feed" : "/#feed"}>Community</a>
+        <a href={isLandingPage ? "#book" : "/#book"}>Book Mode</a>
         <div className="nav__mobile-cta">
-          {user ? <button className="btn btn--ghost" onClick={onLogout}>Log out</button> : <><a className="btn btn--ghost" href="/login">Log in</a><a className="btn btn--gold" href="/register">Join free</a></>}
+          {user ? profileMenu : <><a className="btn btn--ghost" href="/login">Log in</a><a className="btn btn--gold" href="/register">Join free</a></>}
         </div>
       </nav>
       <div className="nav__cta">
-        {user ? <><span className="nav__welcome">Hi, {user.name.split(" ")[0]}</span><button className="btn btn--ghost" onClick={onLogout}>Log out</button></> : <><a className="btn btn--ghost" href="/login">Log in</a><a className="btn btn--gold" href="/register">Join free</a></>}
+        {user ? profileMenu : <><a className="btn btn--ghost" href="/login">Log in</a><a className="btn btn--gold" href="/register">Join free</a></>}
       </div>
-      <button className="burger" aria-label="Menu" onClick={() => setOpen(!open)}>
+      <button className={`burger ${open ? "is-open" : ""}`} aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} onClick={() => setOpen(!open)}>
         <span /><span /><span />
       </button>
     </header>
@@ -506,11 +520,12 @@ function Timeline() {
           <div key={ev.title} className={`tl ${i % 2 ? "tl--right" : ""}`}>
             <div className="tl__dot" />
             <div className="tl__card">
-              <img src={ev.img} alt={ev.title} loading="lazy" />
+              <img src={ev.image} alt={ev.title} loading="lazy" />
               <div className="tl__body">
                 <span className="tl__year">{ev.year}</span>
                 <h3>{ev.title}</h3>
                 <p>{ev.text}</p>
+                <a className="tl__detail-link" href={`/history/${ev.id}`}>Explore this moment <span aria-hidden="true">↗</span></a>
               </div>
             </div>
           </div>
@@ -689,8 +704,10 @@ export default function App() {
     localStorage.setItem("chronicle_token", result.access_token);
     localStorage.setItem("chronicle_user", JSON.stringify(result.user));
     setUser(result.user);
-    window.history.replaceState({}, "", "/home");
-    setRoute("/home");
+    const requestedPath = new URLSearchParams(window.location.search).get("next") || "";
+    const returnPath = /^\/(?:home|timeline|book|create|story\/\d+)(?:[?#].*)?$/.test(requestedPath) ? requestedPath : "/home";
+    window.history.replaceState({}, "", returnPath);
+    setRoute(new URL(returnPath, window.location.origin).pathname);
   };
   const logout = () => {
     localStorage.removeItem("chronicle_token");
@@ -701,13 +718,29 @@ export default function App() {
   };
   const authModes = { "/login": "login", "/register": "register", "/forgot-password": "forgot", "/reset-password": "reset" };
   const requestedReset = new URLSearchParams(window.location.search).get("token") || new URLSearchParams(window.location.search).get("reset") || "";
+  const historyEventId = route.startsWith("/history/") ? route.slice("/history/".length) : "";
+  if (historyEventId) {
+    return (
+      <>
+        <Nav user={user} onLogout={logout} />
+        <main className="history-detail-shell">
+          <HistoryEventDetail
+            eventId={historyEventId}
+            backHref={user ? "/timeline" : "/#timeline"}
+            createHref={user ? "/create?format=timeline" : "/register"}
+          />
+        </main>
+      </>
+    );
+  }
   const memberPage = route === "/create" ? "create" : route === "/timeline" ? "timeline" : route === "/book" ? "book" : route.startsWith("/story/") ? "story" : route === "/home" ? "home" : null;
   if (memberPage) {
     if (!user || !localStorage.getItem("chronicle_token")) {
-      window.history.replaceState({}, "", "/login");
+      const requestedPath = `${route}${window.location.search}${window.location.hash}`;
+      window.history.replaceState({}, "", `/login?next=${encodeURIComponent(requestedPath)}`);
       return <AuthPage key="/login" initialMode="login" onAuth={acceptAuth} />;
     }
-    return <MemberHome key={route} user={user} stories={FEED} onLogout={logout} page={memberPage} storyId={route.startsWith("/story/") ? route.slice("/story/".length) : undefined} />;
+    return <MemberHome key={route} user={user} onLogout={logout} page={memberPage} storyId={route.startsWith("/story/") ? route.slice("/story/".length) : undefined} />;
   }
   const authMode = authModes[route] || (route === "/" && requestedReset ? "reset" : null);
   if (authMode) return <AuthPage key={route} initialMode={authMode} resetToken={requestedReset} onAuth={acceptAuth} />;

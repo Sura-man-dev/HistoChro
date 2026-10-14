@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 
-export async function storyRequest(path, options = {}) {
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
+
+export async function apiRequest(resource, path = "", options = {}) {
   let response;
   try {
-    response = await fetch(`/api/stories${path}`, {
+    response = await fetch(`${API_BASE}/${resource}${path}`, {
       ...options,
       headers: {
         Authorization: `Bearer ${localStorage.getItem("chronicle_token") || ""}`,
@@ -25,15 +27,80 @@ export async function storyRequest(path, options = {}) {
   if (!response.ok) {
     if (typeof data?.detail === "string") throw new Error(data.detail);
     if (response.status >= 500 && !data) throw new Error("Chronicle's API is not running at 127.0.0.1:8000. Start the backend and try again.");
-    throw new Error(`Chronicle couldn't load this story (HTTP ${response.status}).`);
+    throw new Error(`Chronicle couldn't complete this request (HTTP ${response.status}).`);
   }
   return data;
+}
+
+export const storyRequest = (path, options = {}) => apiRequest("stories", path, options);
+export const notificationRequest = (path = "", options = {}) => apiRequest("notifications", path, options);
+
+function renderInlineFormatting(text) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+    part.startsWith("**") && part.endsWith("**")
+      ? <strong key={index}>{part.slice(2, -2)}</strong>
+      : part
+  );
+}
+
+export function renderStoryText(text) {
+  return text.split(/\n{2,}/).map((block, index) => {
+    const lines = block.split("\n");
+    if (lines.every((line) => line.startsWith("> "))) {
+      return <blockquote key={index}>{renderInlineFormatting(lines.map((line) => line.slice(2)).join("\n"))}</blockquote>;
+    }
+    return <p key={index}>{lines.map((line, lineIndex) => (
+      <span key={lineIndex}>{lineIndex > 0 && <br />}{renderInlineFormatting(line)}</span>
+    ))}</p>;
+  });
+}
+
+function StoryTextEditor({ label, value, onChange, maxLength, minLength, rows, placeholder, required = false }) {
+  const [textarea, setTextarea] = useState(null);
+
+  const applyFormatting = (format) => {
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = value.slice(start, end);
+    const replacement = format === "bold"
+      ? `**${selected || "bold text"}**`
+      : (selected || "quoted text").split("\n").map((line) => `> ${line}`).join("\n");
+    const nextValue = `${value.slice(0, start)}${replacement}${value.slice(end)}`;
+    onChange(nextValue);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + replacement.length, start + replacement.length);
+    });
+  };
+
+  return (
+    <label className="story-text-editor">
+      <span>{label}</span>
+      <span className="story-format-toolbar" role="group" aria-label={`Format ${label.toLowerCase()}`}>
+        <button type="button" aria-label="Make selected text bold" title="Bold" onClick={() => applyFormatting("bold")}><strong>B</strong></button>
+        <button type="button" aria-label="Quote selected text" title="Quote" onClick={() => applyFormatting("quote")}>“ ”</button>
+        <small>Select text first, or add formatting where you are typing. Styling appears after publishing.</small>
+      </span>
+      <textarea
+        ref={setTextarea}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        maxLength={maxLength}
+        minLength={minLength}
+        rows={rows}
+        placeholder={placeholder}
+        required={required}
+      />
+    </label>
+  );
 }
 
 const FORMATS = [
   { id: "blog", icon: "▤", title: "Written story", text: "Shape the details into a thoughtful, readable article." },
   { id: "timeline", icon: "◷", title: "Visual timeline", text: "Bring a sequence of important moments together." },
   { id: "media", icon: "▶", title: "Image or video", text: "Tell the story through a powerful visual." },
+  { id: "book", icon: "▣", title: "Book Mode", text: "Build a longer history from clear, readable chapters." },
 ];
 
 export function StoryComposer() {
@@ -72,11 +139,6 @@ export function StoryComposer() {
     setChapters((current) => current.map((chapter, chapterIndex) => chapterIndex === index ? { ...chapter, [field]: value } : chapter));
   };
 
-  const switchToStoryFormats = () => {
-    window.history.replaceState({}, "", "/create");
-    setFormat("blog");
-  };
-
   const submit = async (event) => {
     event.preventDefault();
     setError("");
@@ -109,24 +171,16 @@ export function StoryComposer() {
       <header className="studio-heading">
         <span className="eyebrow">{format === "book" ? "CHRONICLE BOOK MODE" : "YOUR NEXT CHAPTER"}</span>
         <h1>{format === "book" ? "Write history, chapter by chapter." : "Tell a story from history."}</h1>
-        <p>{format === "book" ? "Build a longer read from clear, thoughtful chapters, then publish it to the Chronicle bookshelf." : "Choose one of three storytelling formats, add the details that matter, and bring the past to life for the community."}</p>
+        <p>{format === "book" ? "Build a longer read from clear, thoughtful chapters, then publish it to the Chronicle bookshelf." : "Write a text story, share a striking image or video, build a timeline, or combine words and media."}</p>
       </header>
 
-      {format === "book" ? (
-        <div className="book-mode-callout">
-          <span className="story-format-icon" aria-hidden="true">▣</span>
-          <div><strong>Book Mode</strong><p>Organize a longer history into chapters for the Chronicle bookshelf.</p></div>
-          <button type="button" onClick={switchToStoryFormats}>Choose another format</button>
-        </div>
-      ) : (
-        <div className="story-format-picker" role="group" aria-label="Choose a history story format">
-          {FORMATS.map((item) => (
-            <button key={item.id} type="button" className={format === item.id ? "is-selected" : ""} aria-pressed={format === item.id} onClick={() => setFormat(item.id)}>
-              <span className="story-format-icon" aria-hidden="true">{item.icon}</span><span><strong>{item.title}</strong><small>{item.text}</small></span>
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="story-format-picker" role="group" aria-label="Choose a history story format">
+        {FORMATS.map((item) => (
+          <button key={item.id} type="button" className={format === item.id ? "is-selected" : ""} aria-pressed={format === item.id} onClick={() => setFormat(item.id)}>
+            <span className="story-format-icon" aria-hidden="true">{item.icon}</span><span><strong>{item.title}</strong><small>{item.text}</small></span>
+          </button>
+        ))}
+      </div>
 
       <form className="story-form" onSubmit={submit}>
         <div className="story-form-grid">
@@ -135,9 +189,16 @@ export function StoryComposer() {
           <label>Year or date<input value={year} onChange={(event) => setYear(event.target.value)} maxLength="40" placeholder="e.g. 2560 BCE" /></label>
           <label>Place<input value={place} onChange={(event) => setPlace(event.target.value)} maxLength="120" placeholder="Where did it happen?" /></label>
         </div>
-        {format !== "book" && <label className="story-body-field">{format === "blog" ? "Your article" : format === "timeline" ? "The story behind these moments" : "Context for your image or video"}
-          <textarea value={body} onChange={(event) => setBody(event.target.value)} minLength="2" maxLength="15000" rows="6" placeholder="Share the people, turning points, and details that make this history matter." required />
-        </label>}
+        {format !== "book" && <StoryTextEditor
+          label={format === "blog" ? "Your article" : format === "timeline" ? "The story behind these moments" : "Context for your image or video"}
+          value={body}
+          onChange={setBody}
+          minLength={2}
+          maxLength={15000}
+          rows={6}
+          placeholder="Share the people, turning points, and details that make this history matter."
+          required={format !== "media"}
+        />}
 
         {format === "timeline" && (
           <fieldset className="timeline-editor">
@@ -163,7 +224,7 @@ export function StoryComposer() {
               <div className="book-chapter-fields" key={index}>
                 <span className="timeline-editor-number">{String(index + 1).padStart(2, "0")}</span>
                 <label>Chapter title<input value={chapter.title} onChange={(event) => updateChapter(index, "title", event.target.value)} placeholder={`Chapter ${index + 1}`} required /></label>
-                <label>Chapter text<textarea value={chapter.text} onChange={(event) => updateChapter(index, "text", event.target.value)} maxLength="5000" rows="5" placeholder="Tell this part of the story in an engaging, well-sourced way." required /></label>
+                <StoryTextEditor label="Chapter text" value={chapter.text} onChange={(value) => updateChapter(index, "text", value)} maxLength={5000} rows={5} placeholder="Tell this part of the story in an engaging, well-sourced way." required />
                 {chapters.length > 1 && <button type="button" className="timeline-event-remove" aria-label={`Remove chapter ${index + 1}`} onClick={() => setChapters((current) => current.filter((_, chapterIndex) => chapterIndex !== index))}>×</button>}
               </div>
             ))}
@@ -172,7 +233,7 @@ export function StoryComposer() {
         )}
 
         {format !== "book" && <div className="story-media-field">
-          <div><strong>{format === "media" ? "Your image or video" : "Add visual context"}{format === "media" && <span> · required</span>}</strong><small>JPG, PNG, WebP, GIF, MP4, WebM, or MOV · up to 25 MB</small></div>
+          <div><strong>{format === "media" ? "Your image or video" : "Add visual context"}{format === "media" && <span> · required</span>}</strong><small>{format === "media" ? "A caption is optional, so you can publish an image or video on its own." : "Add an image or video to give your written story visual context."} JPG, PNG, WebP, GIF, MP4, WebM, or MOV · up to 25 MB</small></div>
           <label className="story-upload-button">{media ? "Choose a different file" : "Choose an image or video"}<input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime" onChange={(event) => setMedia(event.target.files?.[0] || null)} required={format === "media"} /></label>
           {preview && <div className="story-media-preview">{media?.type.startsWith("video/") ? <video src={preview} controls /> : <img src={preview} alt="Preview of your story media" />}<button type="button" onClick={() => setMedia(null)}>Remove media</button></div>}
         </div>}
@@ -186,8 +247,10 @@ export function StoryComposer() {
 export function StoryDetail({ storyId }) {
   const [story, setStory] = useState(null);
   const [error, setError] = useState("");
+  const [shareNotice, setShareNotice] = useState("");
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
+  const [likeBusy, setLikeBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -197,12 +260,37 @@ export function StoryDetail({ storyId }) {
     return () => { active = false; };
   }, [storyId]);
 
+  useEffect(() => {
+    if (story && window.location.hash === "#story-comments") {
+      requestAnimationFrame(() => document.getElementById("story-comments")?.scrollIntoView());
+    }
+  }, [story]);
+
   const toggleLike = async () => {
+    setLikeBusy(true);
     try {
       const result = await storyRequest(`/${storyId}/like`, { method: "POST" });
       setStory((current) => ({ ...current, liked: result.liked, likes: result.likes }));
     } catch (requestError) {
       setError(requestError.message);
+    } finally {
+      setLikeBusy(false);
+    }
+  };
+
+  const shareStory = async () => {
+    const url = new URL(`/story/${story.id}`, window.location.origin).href;
+    setError("");
+    setShareNotice("");
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: story.title, text: `Read “${story.title}” on Chronicle`, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setShareNotice("Story link copied. Share it with someone who loves history.");
+      }
+    } catch (shareError) {
+      if (shareError.name !== "AbortError") setError(`Couldn't share automatically. Copy this story link: ${url}`);
     }
   };
 
@@ -235,13 +323,14 @@ export function StoryDetail({ storyId }) {
       )}
       {story.format === "book" && (
         <div className="published-book-chapters">
-          {story.chapters.map((chapter, index) => <section className="published-book-chapter" key={`${chapter.title}-${index}`}><span className="eyebrow">CHAPTER {String(index + 1).padStart(2, "0")}</span><h2>{chapter.title}</h2><div className="published-story-body">{chapter.text.split(/\n{2,}/).map((paragraph, paragraphIndex) => <p key={paragraphIndex}>{paragraph}</p>)}</div></section>)}
+          {story.chapters.map((chapter, index) => <section className="published-book-chapter" key={`${chapter.title}-${index}`}><span className="eyebrow">CHAPTER {String(index + 1).padStart(2, "0")}</span><h2>{chapter.title}</h2><div className="published-story-body">{renderStoryText(chapter.text)}</div></section>)}
         </div>
       )}
-      <div className="published-story-body">{story.body.split(/\n{2,}/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+      {story.body && <div className="published-story-body">{renderStoryText(story.body)}</div>}
       {error && <p className="story-form-error" role="alert">{error}</p>}
-      <div className="published-story-stats"><button type="button" className={story.liked ? "is-liked" : ""} aria-pressed={story.liked} onClick={toggleLike}>{story.liked ? "♥" : "♡"} {story.likes} likes</button><span>◉ {story.views} views</span><span>◌ {story.comments_count} comments</span></div>
-      <section className="published-comments"><span className="eyebrow">JOIN THE CONVERSATION</span><h2>Thoughts & perspectives</h2>
+      {shareNotice && <p className="story-share-notice" role="status">{shareNotice}</p>}
+      <div className="published-story-stats"><button type="button" className={story.liked ? "is-liked" : ""} aria-pressed={story.liked} onClick={toggleLike} disabled={likeBusy}>{story.liked ? "♥" : "♡"} {story.likes} {story.likes === 1 ? "like" : "likes"}</button><span>◉ {story.views} views</span><a href="#story-comments">◌ {story.comments_count} {story.comments_count === 1 ? "comment" : "comments"}</a><button type="button" onClick={shareStory}>↗ Share</button></div>
+      <section className="published-comments" id="story-comments"><span className="eyebrow">JOIN THE CONVERSATION</span><h2>Thoughts & perspectives</h2>
         <form onSubmit={addComment}><label className="sr-only" htmlFor="story-comment">Write a comment</label><textarea id="story-comment" value={comment} onChange={(event) => setComment(event.target.value)} maxLength="2000" rows="3" placeholder="Add a thoughtful comment…" required /><button className="btn btn--gold" type="submit" disabled={busy}>{busy ? "Posting…" : "Post comment"}</button></form>
         <div className="published-comment-list">{story.comments.map((item) => <article key={item.id}><span className="comment-avatar">{item.author[0]?.toUpperCase()}</span><div><strong>{item.author}</strong><small>{new Date(item.created_at * 1000).toLocaleDateString()}</small><p>{item.body}</p></div></article>)}
           {story.comments.length === 0 && <p className="published-comment-empty">Be the first to add your perspective.</p>}
@@ -260,7 +349,7 @@ export function BookModePage({ stories, error }) {
       {error ? <p className="member-feed-error" role="alert">{error}</p> : books.length === 0 ? (
         <div className="book-mode-empty"><span className="book-mode-empty-icon">▣</span><h2>Your next favorite history book is waiting to be written.</h2><p>Create a collection of chapters and help readers explore the past at their own pace.</p><a className="btn btn--gold" href="/create?format=book">Create your first book</a></div>
       ) : (
-        <div className="book-mode-grid">{books.map((book) => <article className="book-mode-card" key={book.id}><span className="eyebrow">{book.era} · {book.chapters.length} chapters</span><h2>{book.title}</h2><p>{book.body || book.chapters[0]?.text}</p><div><span>By {book.author.name}</span><span>◉ {book.views} views</span></div><a href={`/story/${book.id}`}>Open this book <span aria-hidden="true">→</span></a></article>)}</div>
+        <div className="book-mode-grid">{books.map((book) => <article className="book-mode-card" key={book.id}><span className="eyebrow">{book.era} · {book.chapters.length} chapters</span><h2>{book.title}</h2><div className="book-mode-preview">{renderStoryText(book.body || book.chapters[0]?.text || "")}</div><div className="book-mode-card-meta"><span>By {book.author.name}</span><span>◉ {book.views} views</span></div><a href={`/story/${book.id}`}>Open this book <span aria-hidden="true">→</span></a></article>)}</div>
       )}
     </section>
   );
