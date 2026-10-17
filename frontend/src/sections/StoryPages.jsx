@@ -238,7 +238,7 @@ export function StoryComposer() {
           {preview && <div className="story-media-preview">{media?.type.startsWith("video/") ? <video src={preview} controls /> : <img src={preview} alt="Preview of your story media" />}<button type="button" onClick={() => setMedia(null)}>Remove media</button></div>}
         </div>}
         {error && <p className="story-form-error" role="alert">{error}</p>}
-        <div className="story-form-footer"><span>Your story will be visible to the Chronicle community.</span><button className="btn btn--gold" type="submit" disabled={busy}>{busy ? "Publishing…" : "Publish story →"}</button></div>
+        <div className="story-form-footer"><span>Submitted stories are published after an administrator approves them.</span><button className="btn btn--gold" type="submit" disabled={busy}>{busy ? "Submitting…" : "Submit for review →"}</button></div>
       </form>
     </section>
   );
@@ -315,6 +315,7 @@ export function StoryDetail({ storyId }) {
     <article className="published-story">
       <a className="studio-back" href="/home">← Back to Discover</a>
       <header className="published-story-heading"><span className="eyebrow">{story.era} · {story.place || "A moment in history"}</span><h1>{story.title}</h1><p>By {story.author.name} <span>·</span> {story.year || new Date(story.created_at * 1000).toLocaleDateString()}</p></header>
+      {story.status !== "approved" && <aside className={`story-review-status story-review-status--${story.status}`}><strong>{story.status === "rejected" ? "This story needs revision." : "This story is awaiting review."}</strong><p>{story.moderation_note || (story.status === "rejected" ? "Review the administrator's feedback and revise your submission." : "Only you and Chronicle administrators can see it until it is approved.")}</p></aside>}
       {story.media_url && (story.media_type?.startsWith("video/") ? <video className="published-story-media" src={story.media_url} controls preload="metadata" /> : <img className="published-story-media" src={story.media_url} alt={story.title} />)}
       {story.format === "timeline" && (
         <div className="published-timeline">
@@ -349,7 +350,7 @@ export function BookModePage({ stories, error }) {
       {error ? <p className="member-feed-error" role="alert">{error}</p> : books.length === 0 ? (
         <div className="book-mode-empty"><span className="book-mode-empty-icon">▣</span><h2>Your next favorite history book is waiting to be written.</h2><p>Create a collection of chapters and help readers explore the past at their own pace.</p><a className="btn btn--gold" href="/create?format=book">Create your first book</a></div>
       ) : (
-        <div className="book-mode-grid">{books.map((book) => <article className="book-mode-card" key={book.id}><span className="eyebrow">{book.era} · {book.chapters.length} chapters</span><h2>{book.title}</h2><div className="book-mode-preview">{renderStoryText(book.body || book.chapters[0]?.text || "")}</div><div className="book-mode-card-meta"><span>By {book.author.name}</span><span>◉ {book.views} views</span></div><a href={`/story/${book.id}`}>Open this book <span aria-hidden="true">→</span></a></article>)}</div>
+        <div className="book-mode-grid">{books.map((book) => <article className="book-mode-card" key={book.id}><span className="eyebrow">{book.era} · {book.chapters.length} chapters</span>{book.status !== "approved" && <span className={`admin-status admin-status--${book.status}`}>{book.status === "pending" ? "under review" : "revision requested"}</span>}<h2>{book.title}</h2><div className="book-mode-preview">{renderStoryText(book.body || book.chapters[0]?.text || "")}</div><div className="book-mode-card-meta"><span>By {book.author.name}</span><span>◉ {book.views} views</span></div><a href={`/story/${book.id}`}>Open this book <span aria-hidden="true">→</span></a></article>)}</div>
       )}
     </section>
   );

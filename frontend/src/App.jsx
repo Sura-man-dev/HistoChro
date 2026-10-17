@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import AdminDashboard from "./sections/AdminDashboard.jsx";
 import MemberHome from "./sections/MemberHome.jsx";
 import { HISTORY_EVENTS, HistoryEventDetail } from "./sections/HistoryPages.jsx";
 
@@ -126,6 +127,8 @@ function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [token, setToken] = useState(resetToken);
+  const [googleStatus, setGoogleStatus] = useState("idle");
+  const initializedGoogleClient = useRef("");
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   const switchMode = (nextMode, nextToken = token) => {
@@ -152,25 +155,36 @@ function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
   }, []);
 
   useEffect(() => {
-    if (!googleClientId || !["login", "register"].includes(mode)) return undefined;
+    if (!googleClientId || !["login", "register"].includes(mode)) {
+      setGoogleStatus("idle");
+      return undefined;
+    }
+    setGoogleStatus("loading");
     const initialize = () => {
       if (!window.google?.accounts?.id) return;
-      window.google.accounts.id.initialize({
-        client_id: googleClientId,
-        callback: async ({ credential }) => {
-          setBusy(true);
-          setError("");
-          try {
-            onAuth(await authRequest("google", { credential }));
-          } catch (e) {
-            setError(e.message);
-          } finally {
-            setBusy(false);
-          }
-        },
-      });
+      if (initializedGoogleClient.current !== googleClientId) {
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: async ({ credential }) => {
+            setBusy(true);
+            setError("");
+            try {
+              onAuth(await authRequest("google", { credential }));
+            } catch (e) {
+              setError(e.message);
+            } finally {
+              setBusy(false);
+            }
+          },
+        });
+        initializedGoogleClient.current = googleClientId;
+      }
       const target = document.getElementById("google-signin-button");
-      if (target) window.google.accounts.id.renderButton(target, { theme: "outline", size: "large", shape: "pill", text: "continue_with", width: Math.min(360, target.parentElement?.clientWidth || 360) });
+      if (target) {
+        target.replaceChildren();
+        window.google.accounts.id.renderButton(target, { theme: "outline", size: "large", shape: "pill", text: "continue_with", width: Math.min(360, target.parentElement?.clientWidth || 360) });
+        setGoogleStatus("ready");
+      }
     };
     if (window.google?.accounts?.id) initialize();
     else {
@@ -183,7 +197,10 @@ function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
         script.dataset.googleIdentity = "true";
         document.head.appendChild(script);
       }
-      const onError = () => setError("Google sign-in could not load. Check your internet connection and allow accounts.google.com, then try again.");
+      const onError = () => {
+        setGoogleStatus("error");
+        setError("Google sign-in could not load. Check your internet connection and allow accounts.google.com, then try again.");
+      };
       script.addEventListener("load", initialize);
       script.addEventListener("error", onError);
       return () => {
@@ -261,7 +278,7 @@ function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
           </form>
           {(mode === "login" || mode === "register") && <>
             <div className="auth-divider"><span>or continue with</span></div>
-            {googleClientId ? <div className="google-button-wrap"><div id="google-signin-button" /></div> : <button type="button" className="google-button" onClick={() => setError("Google sign-in needs VITE_GOOGLE_CLIENT_ID in the frontend and GOOGLE_CLIENT_ID in the backend.")}><b>G</b> Continue with Google</button>}
+            {googleClientId ? <div className="google-button-wrap"><div id="google-signin-button" />{googleStatus === "loading" && <p className="google-signin-status" role="status">Loading secure Google sign-in…</p>}{googleStatus === "error" && <p className="google-signin-status google-signin-status--error" role="status">Google sign-in is unavailable. You can still use your email and password.</p>}</div> : <button type="button" className="google-button" onClick={() => setError("Google sign-in needs VITE_GOOGLE_CLIENT_ID in the frontend and GOOGLE_CLIENT_ID in the backend.")}><b>G</b> Continue with Google</button>}
           </>}
           <div className="auth-switch">
             {mode === "login" ? <>New to Chronicle? <a className="auth-link" href="/register">Create an account</a></> : mode === "register" ? <>Already have an account? <a className="auth-link" href="/login">Log in</a></> : <button className="auth-link" onClick={() => switchMode("login")}>← Back to log in</button>}
@@ -681,6 +698,8 @@ function Footer() {
 
 export default function App() {
   const [route, setRoute] = useState(window.location.pathname);
+  const [authWarning, setAuthWarning] = useState("");
+  const [authChecked, setAuthChecked] = useState(() => !localStorage.getItem("chronicle_token"));
   const [user, setUser] = useState(() => {
     try {
       const storedUser = JSON.parse(localStorage.getItem("chronicle_user") || "null");
@@ -697,8 +716,56 @@ export default function App() {
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
-  const acceptAuth = (result) => {
-    if (typeof result?.access_token !== "string" || !result.access_token || typeof result.user?.name !== "string" || typeof result.user?.email !== "string") {
+  useEffect(() => {
+    const token = localStorage.getItem("chronicle_token");
+    if (!token) {
+      setAuthChecked(true);
+      return undefined;
+    }
+    let active = true;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 5000);
+    fetch(`${API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
+      .then(async (response) => {
+        if (response.ok) return response.json();
+        if (response.status === 401 || response.status === 403) {
+          const error = new Error("Your Chronicle session is no longer active.");
+          error.sessionExpired = true;
+          throw error;
+        }
+        throw new Error(`Could not verify the current account (HTTP ${response.status}).`);
+      })
+      .then((currentUser) => {
+        if (!active) return;
+        localStorage.setItem("chronicle_user", JSON.stringify(currentUser));
+        setUser(currentUser);
+      })
+      .catch((error) => {
+        if (!active) return;
+        if (error.sessionExpired) {
+          localStorage.removeItem("chronicle_token");
+          localStorage.removeItem("chronicle_user");
+          setUser(null);
+        } else setAuthWarning("Chronicle could not refresh your account details. Your saved session is shown; protected actions will report if the service is unavailable.");
+      })
+      .finally(() => {
+        window.clearTimeout(timeout);
+        if (active) setAuthChecked(true);
+      });
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, []);
+  useEffect(() => {
+    if (route === "/admin" && user && !user.is_admin) {
+      window.history.replaceState({}, "", "/home");
+      setRoute("/home");
+    }
+  }, [route, user]);
+  const acceptAuth = useCallback((result) => {
+    if (typeof result?.access_token !== "string" || !result.access_token || typeof result.user?.name !== "string" || typeof result.user?.email !== "string" || typeof result.user?.is_admin !== "boolean") {
       throw new Error("The account service returned an invalid sign-in response. Please try again.");
     }
     localStorage.setItem("chronicle_token", result.access_token);
@@ -708,14 +775,14 @@ export default function App() {
     const returnPath = /^\/(?:home|timeline|book|create|story\/\d+)(?:[?#].*)?$/.test(requestedPath) ? requestedPath : "/home";
     window.history.replaceState({}, "", returnPath);
     setRoute(new URL(returnPath, window.location.origin).pathname);
-  };
-  const logout = () => {
+  }, []);
+  const logout = useCallback(() => {
     localStorage.removeItem("chronicle_token");
     localStorage.removeItem("chronicle_user");
     setUser(null);
     window.history.replaceState({}, "", "/");
     setRoute("/");
-  };
+  }, []);
   const authModes = { "/login": "login", "/register": "register", "/forgot-password": "forgot", "/reset-password": "reset" };
   const requestedReset = new URLSearchParams(window.location.search).get("token") || new URLSearchParams(window.location.search).get("reset") || "";
   const historyEventId = route.startsWith("/history/") ? route.slice("/history/".length) : "";
@@ -733,14 +800,19 @@ export default function App() {
       </>
     );
   }
-  const memberPage = route === "/create" ? "create" : route === "/timeline" ? "timeline" : route === "/book" ? "book" : route.startsWith("/story/") ? "story" : route === "/home" ? "home" : null;
+  const memberPage = route === "/admin" ? "admin" : route === "/create" ? "create" : route === "/timeline" ? "timeline" : route === "/book" ? "book" : route.startsWith("/story/") ? "story" : route === "/home" ? "home" : null;
   if (memberPage) {
+    if (!authChecked) return <main className="auth-page"><p className="auth-heading">Restoring your Chronicle session…</p></main>;
     if (!user || !localStorage.getItem("chronicle_token")) {
       const requestedPath = `${route}${window.location.search}${window.location.hash}`;
       window.history.replaceState({}, "", `/login?next=${encodeURIComponent(requestedPath)}`);
       return <AuthPage key="/login" initialMode="login" onAuth={acceptAuth} />;
     }
-    return <MemberHome key={route} user={user} onLogout={logout} page={memberPage} storyId={route.startsWith("/story/") ? route.slice("/story/".length) : undefined} />;
+    if (memberPage === "admin") {
+      if (!user.is_admin) return null;
+      return <>{authWarning && <p className="session-warning" role="status">{authWarning}</p>}<AdminDashboard user={user} onLogout={logout} /></>;
+    }
+    return <>{authWarning && <p className="session-warning" role="status">{authWarning}</p>}<MemberHome key={route} user={user} onLogout={logout} page={memberPage} storyId={route.startsWith("/story/") ? route.slice("/story/".length) : undefined} /></>;
   }
   const authMode = authModes[route] || (route === "/" && requestedReset ? "reset" : null);
   if (authMode) return <AuthPage key={route} initialMode={authMode} resetToken={requestedReset} onAuth={acceptAuth} />;

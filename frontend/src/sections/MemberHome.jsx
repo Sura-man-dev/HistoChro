@@ -1,8 +1,56 @@
 import { useEffect, useRef, useState } from "react";
 import { HISTORY_EVENTS } from "./HistoryPages.jsx";
-import { BookModePage, StoryComposer, StoryDetail, notificationRequest, renderStoryText, storyRequest } from "./StoryPages.jsx";
+import { apiRequest, BookModePage, StoryComposer, StoryDetail, notificationRequest, renderStoryText, storyRequest } from "./StoryPages.jsx";
 
 const image = (id, width = 1100) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${width}&q=82`;
+
+function TaskInbox() {
+  const [tasks, setTasks] = useState([]);
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState(null);
+
+  useEffect(() => {
+    apiRequest("tasks")
+      .then(setTasks)
+      .catch((requestError) => setError(requestError.message));
+  }, []);
+
+  const updateStatus = async (task, status) => {
+    setBusyId(task.id);
+    setError("");
+    try {
+      const updated = await apiRequest("tasks", `/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      setTasks((current) => current.map((item) => item.id === updated.id ? updated : item));
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (!tasks.length && !error) return null;
+  return (
+    <section className="member-task-panel" aria-labelledby="member-task-title">
+      <div className="member-task-heading"><div><span className="eyebrow">YOUR CONTRIBUTIONS</span><h2 id="member-task-title">My assignments</h2></div><span>{tasks.filter((task) => task.status !== "completed").length} open</span></div>
+      {error && <p className="member-feed-error" role="alert">{error}</p>}
+      <div className="member-task-list">
+        {tasks.map((task) => (
+          <article className="member-task-card" key={task.id}>
+            <div><span className={`admin-status admin-status--${task.status}`}>{task.status.replace("_", " ")}</span><h3>{task.title}</h3>{task.description && <p>{task.description}</p>}<small>Assigned by {task.creator_name}{task.due_at ? ` · Due ${new Date(task.due_at * 1000).toLocaleDateString()}` : ""}</small></div>
+            <label className="member-task-status">Progress
+              <select value={task.status} disabled={busyId === task.id} onChange={(event) => updateStatus(task, event.target.value)}>
+                <option value="pending">Not started</option><option value="in_progress">In progress</option><option value="completed">Completed</option>
+              </select>
+            </label>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export default function MemberHome({ user, onLogout, page = "home", storyId }) {
   const [message, setMessage] = useState("");
@@ -239,6 +287,7 @@ export default function MemberHome({ user, onLogout, page = "home", storyId }) {
             {profileOpen && (
               <div className="member-popover member-profile-menu" role="menu">
                 <div className="member-profile-details"><strong>{user?.name}</strong><small>{user?.email}</small></div>
+                {user?.is_admin && <a className="member-profile-admin-link" role="menuitem" href="/admin">Administration</a>}
                 <button type="button" role="menuitem" onClick={onLogout}>Sign out</button>
               </div>
             )}
@@ -256,6 +305,7 @@ export default function MemberHome({ user, onLogout, page = "home", storyId }) {
           <a onClick={closeSidebar} href={page === "home" ? "#member-feed" : "/home#member-feed"} title="Community feed"><span>◎</span><span className="sidebar-link-label">Community feed</span></a>
           <a onClick={closeSidebar} className={page === "book" ? "selected" : ""} aria-current={page === "book" ? "page" : undefined} href="/book" title="Book Mode"><span>▣</span><span className="sidebar-link-label">Book Mode</span></a>
           <a onClick={closeSidebar} className={page === "create" ? "selected" : ""} aria-current={page === "create" ? "page" : undefined} href="/create" title="Create a story"><span>＋</span><span className="sidebar-link-label">Create a story</span></a>
+          {user?.is_admin && <a onClick={closeSidebar} href="/admin" title="Administration"><span>⚙</span><span className="sidebar-link-label">Administration</span></a>}
           <a onClick={closeSidebar} href={page === "home" ? "#member-reading" : "/home#member-reading"} title="Reading room"><span>▤</span><span className="sidebar-link-label">Reading room</span></a>
           <div className="sidebar-streak"><span>🔥</span><div><strong>1 day streak</strong><small>Keep your curiosity going</small></div></div>
           <div className="sidebar-note"><span className="eyebrow">TODAY'S PROMPT</span><p>What moment in history would you love to witness?</p><a href={page === "home" ? "#member-feed" : "/home#member-feed"}>Explore the stories →</a></div>
@@ -268,7 +318,7 @@ export default function MemberHome({ user, onLogout, page = "home", storyId }) {
               <div className="member-greeting"><div><span className="eyebrow">THE CHRONICLE ARCHIVE</span><h1>History unfolds, moment by moment.</h1><p>Explore curated landmarks and visual stories shared by the community.</p></div><a className="btn btn--gold" href="/create">＋ Build a timeline</a></div>
               {communityStories.filter((story) => story.format === "timeline").map((story) => (
                 <article className="shared-timeline" key={story.id}>
-                  <header><span className="member-tag">{story.era} · {story.place || "Community timeline"}</span><a href={`/story/${story.id}`}>Open story ↗</a></header>
+                  <header><span className="member-tag">{story.era} · {story.place || "Community timeline"}</span>{story.status !== "approved" && <span className={`admin-status admin-status--${story.status}`}>{story.status === "pending" ? "under review" : "revision requested"}</span>}<a href={`/story/${story.id}`}>Open story ↗</a></header>
                   <h2>{story.title}</h2><p>{story.body}</p>
                   <div className="shared-timeline-events">{story.timeline_events.map((event, index) => <div className="shared-timeline-event" key={`${event.year}-${index}`}><time>{event.year}</time><span className="history-event-marker">{String(index + 1).padStart(2, "0")}</span><div>{event.media_url && <img src={event.media_url} alt={`Visual for ${event.title}`} loading="lazy" />}<h3>{event.title}</h3><p>{event.text}</p></div></div>)}</div>
                   <a href={`/story/${story.id}`} className="shared-timeline-link">Read {story.views} views · {story.likes} likes · {story.comments_count} comments</a>
@@ -290,6 +340,7 @@ export default function MemberHome({ user, onLogout, page = "home", storyId }) {
             </section>
           ) : <>
           <div className="member-greeting"><div><span className="eyebrow">{today.toUpperCase()}</span><h1>Welcome back, {firstName}.</h1><p>A little more wonder from the past is waiting for you.</p></div><a className="member-streak" href="/#features"><span>🔥</span><strong>1 day</strong><small>current streak</small></a></div>
+          <TaskInbox />
 
           <section className="member-feature" style={{ "--member-image": `url(${image("photo-1539650116574-8efeb43e2750", 1500)})` }}>
             <div className="member-feature-copy"><span className="member-tag">TODAY'S DISCOVERY · ANCIENT EGYPT</span><h2>How did the Great Pyramid stand for 4,500 years?</h2><p>Explore the ingenuity, people, and ambition behind one of humanity's most enduring monuments.</p><a className="btn btn--gold" href="#member-timeline">Explore this story <span aria-hidden="true">→</span></a></div>
@@ -339,6 +390,7 @@ export default function MemberHome({ user, onLogout, page = "home", storyId }) {
             {filteredStories.map((story, index) => (
               <article className="member-post" key={story.id || story.handle}>
                 <header><span className="member-post-avatar" style={{ "--avatar-hue": `${index * 82 + 30}deg` }}>{story.user[0]}</span><div><strong>{story.user}</strong><small>{story.handle} · {story.time}</small></div><span className="member-tag member-tag--small">{story.era}</span></header>
+                  {story.status !== "approved" && <div className={`member-post-review member-post-review--${story.status}`}><strong>{story.status === "rejected" ? "Revision requested" : "Awaiting review"}</strong><span>{story.moderation_note || "Only you and administrators can see this post until it is approved."}</span></div>}
                   <a className="member-post-title" href={`/story/${story.id}`}>{story.title}</a>
                   {story.text && <div className="member-post-copy">{renderStoryText(story.text)}</div>}
                 {story.img && (story.media_type?.startsWith("video/") ? <video className="member-post-image" src={story.img} controls preload="metadata" /> : <img className="member-post-image" src={story.img} alt={`Historical story shared by ${story.user}`} loading="lazy" />)}
