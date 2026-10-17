@@ -126,6 +126,7 @@ function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [resetEmailSent, setResetEmailSent] = useState(false);
   const [token, setToken] = useState(resetToken);
   const [googleStatus, setGoogleStatus] = useState("idle");
   const initializedGoogleClient = useRef("");
@@ -139,6 +140,7 @@ function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
     setToken(nextToken);
     setError("");
     setNotice("");
+    setResetEmailSent(false);
   };
 
   useEffect(() => {
@@ -149,6 +151,7 @@ function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
       setToken(new URLSearchParams(window.location.search).get("token") || "");
       setError("");
       setNotice("");
+      setResetEmailSent(false);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -215,6 +218,7 @@ function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
     setBusy(true);
     setError("");
     setNotice("");
+    setResetEmailSent(false);
     try {
       if (mode === "register") {
         onAuth(await authRequest("register", { name, email, password }));
@@ -225,7 +229,7 @@ function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
         if (result.dev_reset_token) {
           switchMode("reset", result.dev_reset_token);
           setNotice("Development mode: enter a new password to complete your reset.");
-        } else setNotice(result.message);
+        } else setResetEmailSent(true);
       } else {
         const result = await authRequest("reset-password", { token, password });
         setNotice(result.message);
@@ -268,13 +272,22 @@ function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
             <p>{descriptions[mode]}</p>
           </div>
           {notice && <div className="auth-notice" role="status">{notice}</div>}
+          {resetEmailSent && mode === "forgot" && (
+            <div className="auth-email-sent" role="status">
+              <span className="auth-email-sent__icon" aria-hidden="true">✉</span>
+              <div>
+                <strong>Check your email</strong>
+                <p>If an account exists for <b>{email}</b>, a password reset link is on its way. Check your inbox and spam folder.</p>
+              </div>
+            </div>
+          )}
           {error && <div className="auth-error" role="alert">{error}</div>}
           <form className="auth-form" onSubmit={submit}>
             {mode === "register" && <label>Your name<input autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" minLength="2" required /></label>}
             {mode !== "reset" && <label>Email address<input autoComplete="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required /></label>}
             {(mode === "login" || mode === "register" || mode === "reset") && <label>{mode === "reset" ? "New password" : "Password"}<input autoComplete={mode === "login" ? "current-password" : "new-password"} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" minLength="8" required /></label>}
             {mode === "login" && <button type="button" className="auth-link auth-forgot" onClick={() => switchMode("forgot")}>Forgot password?</button>}
-            <button className="btn btn--gold btn--lg auth-submit" type="submit" disabled={busy}>{busy ? "Please wait…" : ({ login: "Log in", register: "Create account", forgot: "Send reset link", reset: "Save new password" }[mode])}</button>
+            <button className="btn btn--gold btn--lg auth-submit" type="submit" disabled={busy}>{busy ? "Please wait…" : ({ login: "Log in", register: "Create account", forgot: "Email me a reset link", reset: "Save new password" }[mode])}</button>
           </form>
           {(mode === "login" || mode === "register") && <>
             <div className="auth-divider"><span>or continue with</span></div>
@@ -283,7 +296,7 @@ function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
           <div className="auth-switch">
             {mode === "login" ? <>New to Chronicle? <a className="auth-link" href="/register">Create an account</a></> : mode === "register" ? <>Already have an account? <a className="auth-link" href="/login">Log in</a></> : <button className="auth-link" onClick={() => switchMode("login")}>← Back to log in</button>}
           </div>
-          <p className="auth-legal">By continuing, you agree to Chronicle’s Terms and Privacy Policy.</p>
+          <p className="auth-legal">By continuing, you agree to Chronicle’s <a href="/#policies">Terms and Privacy Policy</a>.</p>
         </div>
       </section>
     </main>
@@ -376,7 +389,7 @@ function Nav({ user, onLogout }) {
       <a href={isLandingPage ? "#top" : "/"} className="logo">
         <BrandMark /> Chronicle
       </a>
-      <nav className={`nav__links ${open ? "open" : ""}`} onClick={(event) => { if (event.target.closest("a")) setOpen(false); }}>
+      <nav id="site-navigation" className={`nav__links ${open ? "open" : ""}`} onClick={(event) => { if (event.target.closest("a")) setOpen(false); }}>
         <a href={isLandingPage ? "#features" : "/#features"}>Features</a>
         <a href={isLandingPage ? "#timeline" : "/#timeline"}>Timeline</a>
         <a href={isLandingPage ? "#feed" : "/#feed"}>Community</a>
@@ -388,8 +401,8 @@ function Nav({ user, onLogout }) {
       <div className="nav__cta">
         {user ? profileMenu : <><a className="btn btn--ghost" href="/login">Log in</a><a className="btn btn--gold" href="/register">Join free</a></>}
       </div>
-      <button className={`burger ${open ? "is-open" : ""}`} aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span /><span /><span />
+      <button className={`burger ${open ? "is-open" : ""}`} aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} aria-controls="site-navigation" onClick={() => setOpen(!open)}>
+      <span />
       </button>
     </header>
   );
@@ -449,8 +462,8 @@ function Hero() {
           or read them like a book. Join a community that can't stop learning.
         </p>
         <div className="hero__buttons">
-          <a href="#join" className="btn btn--gold btn--lg">Start exploring — it's free</a>
-          <a href="#timeline" className="btn btn--outline btn--lg">▶ See how it works</a>
+          <a href="/register" className="btn btn--gold btn--lg">Start exploring — it's free</a>
+          <a href="#how-it-works" className="btn btn--outline btn--lg">▶ See how it works</a>
         </div>
         <div className="hero__proof">
           <div className="avatars">
@@ -472,6 +485,33 @@ function Hero() {
       <a href="#features" className="scroll-hint" aria-label="Scroll down">
         <span />
       </a>
+    </section>
+  );
+}
+
+function HowItWorks() {
+  const steps = [
+    { number: "01", title: "Create your account", text: "Join for free with your email and password, or use Google sign-in.", href: "/register", link: "Create an account" },
+    { number: "02", title: "Share a moment", text: "Write a history story and add the details, images, or video that bring it to life.", href: "/register", link: "Start your story" },
+    { number: "03", title: "Explore together", text: "Browse community stories, follow the timeline, and discover history from new perspectives.", href: "#timeline", link: "Explore the timeline" },
+  ];
+  return (
+    <section id="how-it-works" className="section section--photo how-it-works" style={{ "--section-image": `url(${IMAGES.book})` }}>
+      <div className="section__head reveal">
+        <span className="eyebrow">A simple way to begin</span>
+        <h2>How Chronicle works.</h2>
+        <p>Go from curious reader to part of the history conversation in three steps.</p>
+      </div>
+      <div className="grid grid--3 how-it-works__steps">
+        {steps.map((step) => (
+          <article className="card reveal how-it-works__step" key={step.number}>
+            <span className="how-it-works__number">{step.number}</span>
+            <h3>{step.title}</h3>
+            <p>{step.text}</p>
+            <a className="how-it-works__link" href={step.href}>{step.link} <span aria-hidden="true">→</span></a>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
@@ -615,7 +655,7 @@ function BookMode() {
           <li>Images and video right inside the pages</li>
           <li>Save, bookmark, and continue where you stopped</li>
         </ul>
-        <a href="#join" className="btn btn--gold">Open a book</a>
+        <a href="/register" className="btn btn--gold">Open a book</a>
       </div>
       <div className="book__ui reveal">
         <div className="bookwrap">
@@ -657,23 +697,17 @@ function Testimonials() {
 }
 
 function CTA() {
-  const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const continueWithEmail = (event) => {
-    event.preventDefault();
-    setSubmitted(true);
-  };
   return (
     <section id="join" className="cta" style={{ "--bg": `url(${IMAGES.egypt})` }}>
       <div className="cta__overlay" />
       <div className="cta__inner reveal">
         <h2>Your chapter starts today.</h2>
         <p>Join thousands of people sharing the stories that shaped our world.</p>
-        {submitted ? <p className="cta__success" role="status">Your next chapter starts with you. <a href={`/register?email=${encodeURIComponent(email.trim())}`}>Continue to create your account →</a></p> : <form className="cta__signup" onSubmit={continueWithEmail}>
+        <form className="cta__signup" action="/register" method="get">
           <label className="sr-only" htmlFor="join-email">Email address</label>
-          <input id="join-email" type="email" autoComplete="email" placeholder="Your email address" value={email} onChange={(event) => setEmail(event.target.value)} required />
+          <input id="join-email" name="email" type="email" autoComplete="email" placeholder="Your email address" required />
           <button className="btn btn--gold btn--lg" type="submit">Join Chronicle <span aria-hidden="true">→</span></button>
-        </form>}
+        </form>
         <div className="cta__actions cta__login"><a className="btn btn--outline" href="/login">I already have an account</a></div>
         <small>Free to join. Your next discovery is waiting.</small>
       </div>
@@ -681,16 +715,68 @@ function CTA() {
   );
 }
 
+function FooterInformation() {
+  return (
+    <div className="footer-info section--photo" style={{ "--section-image": `url(${IMAGES.book})` }}>
+      <section id="about" className="footer-info__block reveal">
+        <span className="eyebrow">Our purpose</span>
+        <h2>About Chronicle</h2>
+        <p>Chronicle is a community for people who love history. Share the moments that shaped our world, explore them through a living timeline, and read stories in a book-inspired format.</p>
+        <a className="footer-info__link" href="#how-it-works">See how it works <span aria-hidden="true">→</span></a>
+      </section>
+      <section id="faq" className="footer-info__block reveal">
+        <span className="eyebrow">Quick answers</span>
+        <h2>Frequently asked questions</h2>
+        <details>
+          <summary>Is Chronicle free to join?</summary>
+          <p>Yes. You can create an account and explore Chronicle for free.</p>
+        </details>
+        <details>
+          <summary>How do I create an account?</summary>
+          <p>Choose “Start exploring” or “Join free,” then register with your name, email, and password. Google sign-in is also available when configured.</p>
+        </details>
+        <details>
+          <summary>Can I share photos and video?</summary>
+          <p>Stories support text and media. Upload availability depends on the service configuration.</p>
+        </details>
+      </section>
+      <section id="policies" className="footer-info__block reveal">
+        <span className="eyebrow">Using Chronicle</span>
+        <h2>Terms &amp; community policy</h2>
+        <h3>Using the service</h3>
+        <p>Use Chronicle respectfully, share content you have permission to post, and credit your historical sources. Do not misuse the service or post material that violates community standards. Chronicle may moderate content that does not meet these standards.</p>
+        <h3>Your account and privacy</h3>
+        <p>Chronicle uses your name and email to provide your account. Keep your password private, and avoid putting sensitive personal information in public stories or comments.</p>
+        <h3>Community standards</h3>
+        <p>Share respectful, relevant history content. Credit sources, distinguish evidence from opinion, and do not post material you do not have permission to share. Content shared in the community may be visible to other visitors.</p>
+      </section>
+    </div>
+  );
+}
+
 function Footer() {
   return (
     <footer className="footer section--photo" style={{ "--section-image": `url(${IMAGES.book})` }}>
-      <div className="logo"><BrandMark /> Chronicle</div>
-      <p>© {new Date().getFullYear()} Chronicle. Where history lives.</p>
-      <div className="footer__links">
+      <div className="footer__brand">
+        <a href="#top" className="logo"><BrandMark /> Chronicle</a>
+        <p>Where history lives.</p>
+        <small>© {new Date().getFullYear()} Chronicle. All rights reserved.</small>
+      </div>
+      <div className="footer__group">
+        <strong>Explore</strong>
         <a href="#features">Features</a>
         <a href="#timeline">Timeline</a>
         <a href="#feed">Community</a>
-        <a href="/register">Join</a>
+      </div>
+      <div className="footer__group">
+        <strong>Chronicle</strong>
+        <a href="#about">About</a>
+        <a href="#faq">FAQ</a>
+        <a href="/register">Join free</a>
+      </div>
+      <div className="footer__group">
+        <strong>Policies</strong>
+        <a href="#policies">Terms, privacy &amp; community policy</a>
       </div>
     </footer>
   );
@@ -821,12 +907,14 @@ export default function App() {
       <Nav user={user} onLogout={logout} />
       <Hero />
       <Stats />
+      <HowItWorks />
       <Features />
       <Timeline />
       <Feed />
       <BookMode />
       <Testimonials />
       <CTA />
+      <FooterInformation />
       <Footer />
     </>
   );
