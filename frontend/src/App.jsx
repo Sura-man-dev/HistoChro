@@ -108,7 +108,7 @@ async function authRequest(path, body) {
       throw new Error(data.detail);
     }
     if (response.status >= 500 && !data) {
-      throw new Error(`Chronicle's API returned a non-JSON server response (HTTP ${response.status}). Check the backend terminal for the specific error and restart the API if needed.`);
+      throw new Error(`Chronicle's API returned a non-JSON server response (HTTP ${response.status}). Start the API from the backend folder with .\\.venv\\Scripts\\python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8000, then check http://127.0.0.1:8000/api/health. If the health check reports a database error, set DATABASE_URL to Neon's pooled URL and DIRECT_URL to its direct URL in backend/.env (both with sslmode=require), then inspect the backend terminal.`);
     }
     if (response.status >= 500) {
       throw new Error("The account service couldn't complete your request. Check the backend terminal for the database error, then try again.");

@@ -223,7 +223,7 @@ export default function MemberHome({ user, onLogout, page = "home", storyId }) {
           <a className={page === "book" ? "active" : ""} href="/book">Book Mode</a>
         </nav>
         <div className="member-actions">
-          <a className="member-create-link" href="/create"><span aria-hidden="true">＋</span> Create story</a>
+          <a className="member-create-link" href="/create" aria-label="Create a story" title="Create a story"><span aria-hidden="true">＋</span> Create story</a>
           <label className="member-search">
             <span aria-hidden="true">⌕</span>
             <input

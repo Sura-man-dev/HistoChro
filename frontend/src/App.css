@@ -1794,9 +1794,11 @@ body {
   .member-actions .member-icon-button { display: grid; }
   .member-profile-button { min-height: 40px; gap: 6px; padding: 3px 7px 3px 4px; border-radius: 13px; }
   .member-profile-button .member-avatar { width: 31px; height: 31px; }
-  .member-profile-copy .member-profile-name { display: block; font-size: .67rem; }
+  .member-profile-copy .member-profile-name { display: none; }
   .member-profile-copy small { display: none; }
   .member-profile-chevron { font-size: .75rem; }
+  .member-create-link { display: inline-flex; flex: 0 0 36px; width: 36px; min-height: 36px; justify-content: center; padding: 0; font-size: 0; }
+  .member-create-link > span { font-size: 1.1rem; }
   .member-notifications { right: calc(100% - 36px); }
 }
 @media (max-width: 390px) {
@@ -1805,6 +1807,8 @@ body {
   .member-brand-menu .logo__mark { width: 25px; height: 25px; }
   .member-actions { gap: 4px; }
   .member-search { width: 76px; }
+  .member-actions .member-icon-button { display: none; }
+  .member-create-link { flex-basis: 34px; width: 34px; min-height: 34px; }
   .member-profile-copy { display: none; }
   .member-profile-button { padding: 3px; }
   .member-notifications { right: calc(100% - 34px); }
