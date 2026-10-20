@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { HISTORY_EVENTS } from "./HistoryPages.jsx";
 import { apiRequest, BookModePage, StoryComposer, StoryDetail, notificationRequest, renderStoryText, storyRequest } from "./StoryPages.jsx";
+import { LanguagePicker, useLanguage } from "../language.jsx";
 
 const image = (id, width = 1100) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${width}&q=82`;
 
 function TaskInbox() {
+  const { language } = useLanguage();
   const [tasks, setTasks] = useState([]);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
@@ -39,7 +41,7 @@ function TaskInbox() {
       <div className="member-task-list">
         {tasks.map((task) => (
           <article className="member-task-card" key={task.id}>
-            <div><span className={`admin-status admin-status--${task.status}`}>{task.status.replace("_", " ")}</span><h3>{task.title}</h3>{task.description && <p>{task.description}</p>}<small>Assigned by {task.creator_name}{task.due_at ? ` · Due ${new Date(task.due_at * 1000).toLocaleDateString()}` : ""}</small></div>
+            <div><span className={`admin-status admin-status--${task.status}`}>{task.status.replace("_", " ")}</span><h3>{task.title}</h3>{task.description && <p>{task.description}</p>}<small>Assigned by <span className="user-generated-name">{task.creator_name}</span>{task.due_at ? ` · Due ${new Date(task.due_at * 1000).toLocaleDateString(language === "am" ? "am-ET" : "en-US")}` : ""}</small></div>
             <label className="member-task-status">Progress
               <select value={task.status} disabled={busyId === task.id} onChange={(event) => updateStatus(task, event.target.value)}>
                 <option value="pending">Not started</option><option value="in_progress">In progress</option><option value="completed">Completed</option>
@@ -53,6 +55,7 @@ function TaskInbox() {
 }
 
 export default function MemberHome({ user, onLogout, page = "home", storyId }) {
+  const { t, language } = useLanguage();
   const [message, setMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [communityStories, setCommunityStories] = useState([]);
@@ -68,7 +71,7 @@ export default function MemberHome({ user, onLogout, page = "home", storyId }) {
   const previousNotificationIds = useRef(null);
   const [timelineEra, setTimelineEra] = useState("All eras");
   const firstName = user?.name?.trim().split(/\s+/)[0] || "Historian";
-  const today = new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric" }).format(new Date());
+  const today = new Intl.DateTimeFormat(language === "am" ? "am-ET" : "en", { weekday: "long", month: "long", day: "numeric" }).format(new Date());
   const timelineEras = ["All eras", ...new Set(HISTORY_EVENTS.map((event) => event.era))];
   const visibleEvents = HISTORY_EVENTS.filter((event) => timelineEra === "All eras" || event.era === timelineEra)
     .sort((a, b) => a.order - b.order);
@@ -125,7 +128,7 @@ export default function MemberHome({ user, onLogout, page = "home", storyId }) {
     ...story,
     user: story.author.name,
     handle: `@${story.author.name.toLowerCase().replace(/\s+/g, "_")}`,
-    time: new Date(story.created_at * 1000).toLocaleDateString(),
+    time: new Date(story.created_at * 1000).toLocaleDateString(language === "am" ? "am-ET" : "en-US"),
     text: story.body || story.chapters?.[0]?.text || story.timeline_events?.[0]?.text || "",
     img: story.media_url,
   }));
@@ -218,11 +221,12 @@ export default function MemberHome({ user, onLogout, page = "home", storyId }) {
           <a className="logo" href="/home" aria-label="Chronicle home"><img className="logo__mark" src="/favicon.svg" alt="" aria-hidden="true" /> Chronicle</a>
         </div>
         <nav aria-label="Main navigation" className="member-toplinks">
-          <a className={page === "home" ? "active" : ""} href="/home">Discover</a>
-          <a className={page === "timeline" ? "active" : ""} href="/timeline">Timeline</a>
-          <a className={page === "book" ? "active" : ""} href="/book">Book Mode</a>
+          <a className={page === "home" ? "active" : ""} href="/home">{t("Discover")}</a>
+          <a className={page === "timeline" ? "active" : ""} href="/timeline">{t("Timeline")}</a>
+          <a className={page === "book" ? "active" : ""} href="/book">{t("Book Mode")}</a>
         </nav>
         <div className="member-actions">
+          <LanguagePicker />
           <a className="member-create-link" href="/create" aria-label="Create a story" title="Create a story"><span aria-hidden="true">＋</span> Create story</a>
           <label className="member-search">
             <span aria-hidden="true">⌕</span>
@@ -263,7 +267,7 @@ export default function MemberHome({ user, onLogout, page = "home", storyId }) {
                     }}
                   >
                     <span className={`notification-avatar ${notification.kind === "comment" ? "notification-avatar--community" : ""}`} aria-hidden="true">{notification.kind === "comment" ? "◌" : "♥"}</span>
-                    <span className="member-notification-copy"><strong>{notification.actor_name} {notification.message}</strong><small>{notification.story_title} · {new Date(notification.created_at * 1000).toLocaleString()}</small></span>
+                    <span className="member-notification-copy"><strong>{notification.actor_name} {notification.message}</strong><small>{notification.story_title} · {new Date(notification.created_at * 1000).toLocaleString(language === "am" ? "am-ET" : "en-US")}</small></span>
                     {!notification.read && <span className="notification-unread-dot" aria-label="Unread" />}
                   </a>
                 )) : !notificationError && <p className="member-notifications-empty">No notifications yet. Likes and comments on your stories will appear here.</p>}
@@ -272,25 +276,15 @@ export default function MemberHome({ user, onLogout, page = "home", storyId }) {
             )}
           </div>
           <div className="member-action-wrap">
-            <button
-              type="button"
+            <a
               className="member-profile-button"
-              aria-label={`Open ${firstName}'s profile menu`}
-              aria-haspopup="menu"
-              aria-expanded={profileOpen}
-              onClick={toggleProfile}
+              aria-label={t("Home")}
+              href="/home"
             >
               <span className="member-avatar">{firstName[0].toUpperCase()}</span>
-              <span className="member-profile-copy"><strong className="member-profile-name">{firstName}</strong><small>My account</small></span>
-              <span className="member-profile-chevron" aria-hidden="true">⌄</span>
-            </button>
-            {profileOpen && (
-              <div className="member-popover member-profile-menu" role="menu">
-                <div className="member-profile-details"><strong>{user?.name}</strong><small>{user?.email}</small></div>
-                {user?.is_admin && <a className="member-profile-admin-link" role="menuitem" href="/admin">Administration</a>}
-                <button type="button" role="menuitem" onClick={onLogout}>Sign out</button>
-              </div>
-            )}
+              <span className="member-profile-copy"><strong className="member-profile-name user-generated-name">{firstName}</strong><small>{t("Home")}</small></span>
+            </a>
+            <button type="button" className="member-signout" onClick={onLogout}>{t("Sign out")}</button>
           </div>
         </div>
       </header>
@@ -339,7 +333,7 @@ export default function MemberHome({ user, onLogout, page = "home", storyId }) {
               </section>
             </section>
           ) : <>
-          <div className="member-greeting"><div><span className="eyebrow">{today.toUpperCase()}</span><h1>Welcome back, {firstName}.</h1><p>A little more wonder from the past is waiting for you.</p></div><a className="member-streak" href="/#features"><span>🔥</span><strong>1 day</strong><small>current streak</small></a></div>
+          <div className="member-greeting"><div><span className="eyebrow">{today.toUpperCase()}</span><h1>{t("Welcome back,")} <span className="user-generated-name">{firstName}</span>.</h1><p>A little more wonder from the past is waiting for you.</p></div><a className="member-streak" href="/#features"><span>🔥</span><strong>1 day</strong><small>current streak</small></a></div>
           <TaskInbox />
 
           <section className="member-feature" style={{ "--member-image": `url(${image("photo-1539650116574-8efeb43e2750", 1500)})` }}>
@@ -408,7 +402,7 @@ export default function MemberHome({ user, onLogout, page = "home", storyId }) {
           <section className="member-reading" id="member-reading" style={{ "--reading-image": `url(${image("photo-1481627834876-b7833e8f5570", 900)})` }}>
             <div><span className="eyebrow">PICK UP WHERE YOU LEFT OFF</span><h2>A world between two covers.</h2><p>Continue your journey through the rise and fall of Rome.</p><a href="#member-timeline">Continue reading <span aria-hidden="true">→</span></a></div>
           </section>
-          <footer className="member-footer">© {new Date().getFullYear()} Chronicle <span>Curiosity connects us across time.</span></footer>
+      <footer className="member-footer">© {new Date().getFullYear()} Chronicle <span>Curiosity connects us across time.</span><nav aria-label="Policies and help"><a href="/faq">FAQ</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/community-policy">Community policy</a></nav></footer>
           </>}
         </main>
       </div>

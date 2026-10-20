@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLanguage } from "../language.jsx";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
 
@@ -104,6 +105,7 @@ const FORMATS = [
 ];
 
 export function StoryComposer() {
+  const { t } = useLanguage();
   const requestedFormat = new URLSearchParams(window.location.search).get("format");
   const [format, setFormat] = useState(requestedFormat === "book" || FORMATS.some((item) => item.id === requestedFormat) ? requestedFormat : "blog");
   const [title, setTitle] = useState("");
@@ -172,6 +174,7 @@ export function StoryComposer() {
         <span className="eyebrow">{format === "book" ? "CHRONICLE BOOK MODE" : "YOUR NEXT CHAPTER"}</span>
         <h1>{format === "book" ? "Write history, chapter by chapter." : "Tell a story from history."}</h1>
         <p>{format === "book" ? "Build a longer read from clear, thoughtful chapters, then publish it to the Chronicle bookshelf." : "Write a text story, share a striking image or video, build a timeline, or combine words and media."}</p>
+        <p className="story-language-note">{t("Write your post in English or Amharic. Your words will be published exactly as you write them.")}</p>
       </header>
 
       <div className="story-format-picker" role="group" aria-label="Choose a history story format">
@@ -245,6 +248,7 @@ export function StoryComposer() {
 }
 
 export function StoryDetail({ storyId }) {
+  const { language } = useLanguage();
   const [story, setStory] = useState(null);
   const [error, setError] = useState("");
   const [shareNotice, setShareNotice] = useState("");
@@ -314,7 +318,7 @@ export function StoryDetail({ storyId }) {
   return (
     <article className="published-story">
       <a className="studio-back" href="/home">← Back to Discover</a>
-      <header className="published-story-heading"><span className="eyebrow">{story.era} · {story.place || "A moment in history"}</span><h1>{story.title}</h1><p>By {story.author.name} <span>·</span> {story.year || new Date(story.created_at * 1000).toLocaleDateString()}</p></header>
+      <header className="published-story-heading"><span className="eyebrow">{story.era} · {story.place || "A moment in history"}</span><h1>{story.title}</h1><p>By {story.author.name} <span>·</span> {story.year || new Date(story.created_at * 1000).toLocaleDateString(language === "am" ? "am-ET" : "en-US")}</p></header>
       {story.status !== "approved" && <aside className={`story-review-status story-review-status--${story.status}`}><strong>{story.status === "rejected" ? "This story needs revision." : "This story is awaiting review."}</strong><p>{story.moderation_note || (story.status === "rejected" ? "Review the administrator's feedback and revise your submission." : "Only you and Chronicle administrators can see it until it is approved.")}</p></aside>}
       {story.media_url && (story.media_type?.startsWith("video/") ? <video className="published-story-media" src={story.media_url} controls preload="metadata" /> : <img className="published-story-media" src={story.media_url} alt={story.title} />)}
       {story.format === "timeline" && (
@@ -333,7 +337,7 @@ export function StoryDetail({ storyId }) {
       <div className="published-story-stats"><button type="button" className={story.liked ? "is-liked" : ""} aria-pressed={story.liked} onClick={toggleLike} disabled={likeBusy}>{story.liked ? "♥" : "♡"} {story.likes} {story.likes === 1 ? "like" : "likes"}</button><span>◉ {story.views} views</span><a href="#story-comments">◌ {story.comments_count} {story.comments_count === 1 ? "comment" : "comments"}</a><button type="button" onClick={shareStory}>↗ Share</button></div>
       <section className="published-comments" id="story-comments"><span className="eyebrow">JOIN THE CONVERSATION</span><h2>Thoughts & perspectives</h2>
         <form onSubmit={addComment}><label className="sr-only" htmlFor="story-comment">Write a comment</label><textarea id="story-comment" value={comment} onChange={(event) => setComment(event.target.value)} maxLength="2000" rows="3" placeholder="Add a thoughtful comment…" required /><button className="btn btn--gold" type="submit" disabled={busy}>{busy ? "Posting…" : "Post comment"}</button></form>
-        <div className="published-comment-list">{story.comments.map((item) => <article key={item.id}><span className="comment-avatar">{item.author[0]?.toUpperCase()}</span><div><strong>{item.author}</strong><small>{new Date(item.created_at * 1000).toLocaleDateString()}</small><p>{item.body}</p></div></article>)}
+        <div className="published-comment-list">{story.comments.map((item) => <article key={item.id}><span className="comment-avatar">{item.author[0]?.toUpperCase()}</span><div><strong>{item.author}</strong><small>{new Date(item.created_at * 1000).toLocaleDateString(language === "am" ? "am-ET" : "en-US")}</small><p>{item.body}</p></div></article>)}
           {story.comments.length === 0 && <p className="published-comment-empty">Be the first to add your perspective.</p>}
         </div>
       </section>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiRequest, renderStoryText } from "./StoryPages.jsx";
+import { LanguagePicker, useLanguage } from "../language.jsx";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -29,6 +30,7 @@ function StoryDescription(story) {
 }
 
 export default function AdminDashboard({ user, onLogout }) {
+  const { language, t } = useLanguage();
   const [tab, setTab] = useState("overview");
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
@@ -213,8 +215,8 @@ export default function AdminDashboard({ user, onLogout }) {
     <div className="member-home admin-shell">
       <header className="admin-topbar">
         <a className="logo" href="/home"><img className="logo__mark" src="/favicon.svg" alt="" aria-hidden="true" /> Chronicle</a>
-        <div className="admin-topbar-label"><span className="eyebrow">ADMIN WORKSPACE</span><strong>Good to see you, {user.name.split(/\s+/)[0]}.</strong></div>
-        <div className="admin-topbar-actions"><a href="/home">← Community</a><button type="button" onClick={onLogout}>Sign out</button></div>
+        <div className="admin-topbar-label"><span className="eyebrow">ADMIN WORKSPACE</span><strong>{t("Good to see you,")} <span className="user-generated-name">{user.name.split(/\s+/)[0]}</span>.</strong></div>
+        <div className="admin-topbar-actions"><LanguagePicker /><a href="/home">← Community</a><button type="button" onClick={onLogout}>Sign out</button></div>
       </header>
       <main className="admin-main">
         <div className="admin-page-heading"><div><span className="eyebrow">CHRONICLE MANAGEMENT</span><h1>Steward the stories.</h1><p>Support your community, review new history, and keep the archive thoughtful.</p></div><span className="admin-access-badge">✦ Administrator</span></div>
@@ -244,7 +246,7 @@ export default function AdminDashboard({ user, onLogout }) {
           <section className="admin-panel admin-management-panel" aria-labelledby="admin-users-title">
             <div className="admin-section-heading"><div><span className="eyebrow">MEMBER DIRECTORY</span><h2 id="admin-users-title">Manage accounts</h2><p>Activate or suspend access and assign administrator privileges.</p></div><label className="admin-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Find a member" value={query} onChange={(event) => setQuery(event.target.value)} /></label></div>
             <div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>Member</th><th>Joined</th><th>Posts</th><th>Access</th><th>Account actions</th></tr></thead><tbody>
-              {visibleUsers.map((member) => <tr key={member.id}><td><strong>{member.name}</strong><small>{member.email}</small></td><td>{new Date(member.created_at * 1000).toLocaleDateString()}</td><td>{member.stories_count}</td><td><span className={`admin-status ${member.is_active ? "admin-status--approved" : "admin-status--rejected"}`}>{member.is_active ? "Active" : "Suspended"}</span><span className="admin-role-label">{member.is_admin ? "Administrator" : "Member"}</span></td><td><div className="admin-row-actions"><button type="button" disabled={busy === `user-${member.id}` || member.id === user.id} onClick={() => updateUser(member, { is_active: !member.is_active })}>{member.is_active ? "Suspend" : "Activate"}</button><button type="button" disabled={busy === `user-${member.id}` || member.id === user.id} onClick={() => updateUser(member, { is_admin: !member.is_admin })}>{member.is_admin ? "Remove admin" : "Make admin"}</button></div></td></tr>)}
+              {visibleUsers.map((member) => <tr key={member.id}><td><strong>{member.name}</strong><small>{member.email}</small></td><td>{new Date(member.created_at * 1000).toLocaleDateString(language === "am" ? "am-ET" : "en-US")}</td><td>{member.stories_count}</td><td><span className={`admin-status ${member.is_active ? "admin-status--approved" : "admin-status--rejected"}`}>{member.is_active ? "Active" : "Suspended"}</span><span className="admin-role-label">{member.is_admin ? "Administrator" : "Member"}</span></td><td><div className="admin-row-actions"><button type="button" disabled={busy === `user-${member.id}` || member.id === user.id} onClick={() => updateUser(member, { is_active: !member.is_active })}>{member.is_active ? "Suspend" : "Activate"}</button><button type="button" disabled={busy === `user-${member.id}` || member.id === user.id} onClick={() => updateUser(member, { is_admin: !member.is_admin })}>{member.is_admin ? "Remove admin" : "Make admin"}</button></div></td></tr>)}
               {!visibleUsers.length && <tr><td colSpan="5" className="admin-empty">No matching members found.</td></tr>}
             </tbody></table></div>
             <p className="admin-footnote">Showing up to 500 recent members. Your own access cannot be changed here.</p>
@@ -255,7 +257,7 @@ export default function AdminDashboard({ user, onLogout }) {
           <section className="admin-story-review" aria-labelledby="admin-stories-title">
             <div className="admin-section-heading"><div><span className="eyebrow">EDITORIAL REVIEW</span><h2 id="admin-stories-title">Review community posts</h2><p>Explore posts by format, approve accurate work, or return it with a constructive note.</p></div><div className="admin-filters"><label>Type<select value={formatFilter} onChange={(event) => setFormatFilter(event.target.value)}>{STORY_FORMATS.map((format) => <option key={format} value={format}>{format === "all" ? "All types" : format}</option>)}</select></label><label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>{STORY_STATUSES.map((status) => <option key={status} value={status}>{status === "all" ? "All statuses" : status.replace("_", " ")}</option>)}</select></label></div></div>
             {stories.length ? <div className="admin-story-list">{stories.map((story) => <article className="admin-story-card" key={story.id}>
-              <div className="admin-story-meta"><span className="admin-format-label">{story.format}</span><span className={`admin-status admin-status--${story.status}`}>{story.status}</span><span>{story.era}{story.place ? ` · ${story.place}` : ""}</span><span>{new Date(story.created_at * 1000).toLocaleDateString()}</span></div>
+              <div className="admin-story-meta"><span className="admin-format-label">{story.format}</span><span className={`admin-status admin-status--${story.status}`}>{story.status}</span><span>{story.era}{story.place ? ` · ${story.place}` : ""}</span><span>{new Date(story.created_at * 1000).toLocaleDateString(language === "am" ? "am-ET" : "en-US")}</span></div>
               <h3>{story.title}</h3><p className="admin-story-author">By {story.author.name} · {story.views} views · {story.likes} likes · {story.comments_count} comments</p>
               {story.media_url && (story.media_type?.startsWith("video/") ? <video className="admin-story-media" src={story.media_url} controls preload="metadata" /> : <img className="admin-story-media" src={story.media_url} alt={`Submitted media for ${story.title}`} loading="lazy" />)}
               <div className="admin-story-content">{renderStoryText(StoryDescription(story).slice(0, 1800))}</div>
@@ -279,7 +281,7 @@ export default function AdminDashboard({ user, onLogout }) {
             </form>
             <div className="admin-section-heading admin-task-list-heading"><div><span className="eyebrow">WORK IN PROGRESS</span><h2>All assignments</h2></div></div>
             <div className="admin-assignment-list">{tasks.length ? tasks.map((task) => <article className="admin-assignment-card" key={task.id}>
-              <div className="admin-assignment-copy"><span className={`admin-status admin-status--${task.status}`}>{task.status.replace("_", " ")}</span><h3>{task.title}</h3>{task.description && <p>{task.description}</p>}<small>Created by {task.creator_name}{task.due_at ? ` · Due ${new Date(task.due_at * 1000).toLocaleString()}` : ""}</small></div>
+              <div className="admin-assignment-copy"><span className={`admin-status admin-status--${task.status}`}>{task.status.replace("_", " ")}</span><h3>{task.title}</h3>{task.description && <p>{task.description}</p>}<small>Created by <span className="user-generated-name">{task.creator_name}</span>{task.due_at ? ` · Due ${new Date(task.due_at * 1000).toLocaleString(language === "am" ? "am-ET" : "en-US")}` : ""}</small></div>
               <label>Assignee<select value={task.assignee_id} disabled={busy === `task-${task.id}`} onChange={(event) => updateTask(task, { assignee_id: Number(event.target.value) })}>{users.filter((member) => member.is_active).map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></label>
               <label>Status<select value={task.status} disabled={busy === `task-${task.id}`} onChange={(event) => updateTask(task, { status: event.target.value })}>{TASK_STATUSES.map((status) => <option key={status} value={status}>{status.replace("_", " ")}</option>)}</select></label>
               <button type="button" className="admin-delete-button" disabled={busy === `task-${task.id}`} onClick={() => deleteTask(task)}>Delete</button>

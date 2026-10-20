@@ -2,6 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import AdminDashboard from "./sections/AdminDashboard.jsx";
 import MemberHome from "./sections/MemberHome.jsx";
 import { HISTORY_EVENTS, HistoryEventDetail } from "./sections/HistoryPages.jsx";
+import { LanguagePicker, useLanguage, useSiteLocalization } from "./language.jsx";
+import ResourcePage from "./sections/ResourcePages.jsx";
 
 const HeroScene3D = lazy(() => import("./HeroScene.jsx"));
 
@@ -87,7 +89,8 @@ async function authRequest(path, body) {
       body: JSON.stringify(body),
     });
   } catch {
-    throw new Error("Chronicle's account service is unavailable. Start the backend in a separate terminal (see README), then try again.");
+    console.error("Chronicle account request could not reach the API.");
+    throw new Error("The account service is temporarily unavailable. Please try again in a moment.");
   }
   const responseText = await response.text();
   let data = null;
@@ -99,19 +102,22 @@ async function authRequest(path, body) {
   if (!response.ok) {
     const proxyFailed = typeof responseText === "string" && /ECONNREFUSED|proxy error|<html/i.test(responseText);
     if (response.status >= 500 && proxyFailed) {
-      throw new Error("Chronicle's backend is not running on 127.0.0.1:8000. Start it in a second terminal from the backend folder with `.\\.venv\\Scripts\\python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8000`, then try again. Keep both the backend and frontend terminals open.");
+      console.error("Chronicle API proxy could not reach the backend.");
+      throw new Error("The account service is temporarily unavailable. Please try again in a moment.");
     }
     if (typeof data?.detail === "string" && data.detail.trim()) {
       if (response.status >= 500 && data.detail === "Internal Server Error") {
-        throw new Error("Chronicle's API encountered a server error. Check the backend terminal for the traceback; database, Google, and upload errors have separate messages.");
+        console.error("Chronicle API returned an internal server error.");
+        throw new Error("We couldn't complete your request right now. Please try again in a moment.");
       }
       throw new Error(data.detail);
     }
     if (response.status >= 500 && !data) {
-      throw new Error(`Chronicle's API returned a non-JSON server response (HTTP ${response.status}). Start the API from the backend folder with .\\.venv\\Scripts\\python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8000, then check http://127.0.0.1:8000/api/health. If the health check reports a database error, set DATABASE_URL to Neon's pooled URL and DIRECT_URL to its direct URL in backend/.env (both with sslmode=require), then inspect the backend terminal.`);
+      console.error(`Chronicle API returned a non-JSON server response (HTTP ${response.status}).`);
+      throw new Error("We couldn't complete your request right now. Please try again in a moment.");
     }
     if (response.status >= 500) {
-      throw new Error("The account service couldn't complete your request. Check the backend terminal for the database error, then try again.");
+      throw new Error("We couldn't complete your request right now. Please try again in a moment.");
     }
     throw new Error(`The account service returned an unexpected response (HTTP ${response.status}). Please try again.`);
   }
@@ -119,6 +125,7 @@ async function authRequest(path, body) {
 }
 
 function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
+  const { t } = useLanguage();
   const [mode, setMode] = useState(initialMode);
   const [name, setName] = useState("");
   const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get("email") || "");
@@ -267,9 +274,9 @@ function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
         <div className="auth-panel">
           <a className="auth-brand" href="/"><BrandMark /><span>Chronicle</span></a>
           <div className="auth-heading">
-            <span className="eyebrow">A world of stories awaits</span>
-            <h2 id="auth-title">{titles[mode]}</h2>
-            <p>{descriptions[mode]}</p>
+            <span className="eyebrow">{t("A world of stories awaits")}</span>
+            <h2 id="auth-title">{t(titles[mode])}</h2>
+            <p>{t(descriptions[mode])}</p>
           </div>
           {notice && <div className="auth-notice" role="status">{notice}</div>}
           {resetEmailSent && mode === "forgot" && (
@@ -283,11 +290,11 @@ function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
           )}
           {error && <div className="auth-error" role="alert">{error}</div>}
           <form className="auth-form" onSubmit={submit}>
-            {mode === "register" && <label>Your name<input autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" minLength="2" required /></label>}
-            {mode !== "reset" && <label>Email address<input autoComplete="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required /></label>}
-            {(mode === "login" || mode === "register" || mode === "reset") && <label>{mode === "reset" ? "New password" : "Password"}<input autoComplete={mode === "login" ? "current-password" : "new-password"} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" minLength="8" required /></label>}
-            {mode === "login" && <button type="button" className="auth-link auth-forgot" onClick={() => switchMode("forgot")}>Forgot password?</button>}
-            <button className="btn btn--gold btn--lg auth-submit" type="submit" disabled={busy}>{busy ? "Please wait…" : ({ login: "Log in", register: "Create account", forgot: "Email me a reset link", reset: "Save new password" }[mode])}</button>
+            {mode === "register" && <label>{t("Your name")}<input autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" minLength="2" required /></label>}
+            {mode !== "reset" && <label>{t("Email address")}<input autoComplete="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required /></label>}
+            {(mode === "login" || mode === "register" || mode === "reset") && <label>{t(mode === "reset" ? "New password" : "Password")}<input autoComplete={mode === "login" ? "current-password" : "new-password"} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" minLength="8" required /></label>}
+            {mode === "login" && <button type="button" className="auth-link auth-forgot" onClick={() => switchMode("forgot")}>{t("Forgot password?")}</button>}
+            <button className="btn btn--gold btn--lg auth-submit" type="submit" disabled={busy}>{busy ? t("Please wait…") : t(({ login: "Log in", register: "Create account", forgot: "Email me a reset link", reset: "Save new password" }[mode]))}</button>
           </form>
           {(mode === "login" || mode === "register") && <>
             <div className="auth-divider"><span>or continue with</span></div>
@@ -296,7 +303,7 @@ function AuthPage({ onAuth, initialMode = "login", resetToken = "" }) {
           <div className="auth-switch">
             {mode === "login" ? <>New to Chronicle? <a className="auth-link" href="/register">Create an account</a></> : mode === "register" ? <>Already have an account? <a className="auth-link" href="/login">Log in</a></> : <button className="auth-link" onClick={() => switchMode("login")}>← Back to log in</button>}
           </div>
-          <p className="auth-legal">By continuing, you agree to Chronicle’s <a href="/#policies">Terms and Privacy Policy</a>.</p>
+          <p className="auth-legal">By continuing, you agree to Chronicle’s <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.</p>
         </div>
       </section>
     </main>
@@ -352,6 +359,7 @@ function Counter({ to, suffix = "" }) {
 }
 
 function Nav({ user, onLogout }) {
+  const { t } = useLanguage();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -359,23 +367,11 @@ function Nav({ user, onLogout }) {
   const isLandingPage = window.location.pathname === "/";
   const profileMenu = (
     <div className="nav-profile-wrap">
-      <button
-        type="button"
-        className="nav-profile-button"
-        aria-haspopup="menu"
-        aria-expanded={profileOpen}
-        onClick={() => setProfileOpen((value) => !value)}
-      >
+      <a href="/home" className="nav-profile-button" aria-label="Home">
         <span className="nav-profile-avatar">{firstName[0].toUpperCase()}</span>
         <span className="nav-profile-name">{firstName}</span>
-        <span className="nav-profile-chevron" aria-hidden="true">⌄</span>
-      </button>
-      {profileOpen && (
-        <div className="nav-profile-menu" role="menu">
-          <div className="nav-profile-details"><strong>{user?.name}</strong><small>{user?.email}</small></div>
-          <button type="button" role="menuitem" onClick={onLogout}>Sign out</button>
-        </div>
-      )}
+        <span>{t("Home")}</span>
+      </a>
     </div>
   );
   useEffect(() => {
@@ -390,14 +386,15 @@ function Nav({ user, onLogout }) {
         <BrandMark /> Chronicle
       </a>
       <nav id="site-navigation" className={`nav__links ${open ? "open" : ""}`} onClick={(event) => { if (event.target.closest("a")) setOpen(false); }}>
-        <a href={isLandingPage ? "#features" : "/#features"}>Features</a>
-        <a href={isLandingPage ? "#timeline" : "/#timeline"}>Timeline</a>
-        <a href={isLandingPage ? "#feed" : "/#feed"}>Community</a>
-        <a href={isLandingPage ? "#book" : "/#book"}>Book Mode</a>
+        <a href={isLandingPage ? "#features" : "/#features"}>{t("Features")}</a>
+        <a href={isLandingPage ? "#timeline" : "/#timeline"}>{t("Timeline")}</a>
+        <a href={isLandingPage ? "#feed" : "/#feed"}>{t("Community")}</a>
+        <a href={isLandingPage ? "#book" : "/#book"}>{t("Book Mode")}</a>
         <div className="nav__mobile-cta">
           {user ? profileMenu : <><a className="btn btn--ghost" href="/login">Log in</a><a className="btn btn--gold" href="/register">Join free</a></>}
         </div>
       </nav>
+      <LanguagePicker />
       <div className="nav__cta">
         {user ? profileMenu : <><a className="btn btn--ghost" href="/login">Log in</a><a className="btn btn--gold" href="/register">Join free</a></>}
       </div>
@@ -409,6 +406,7 @@ function Nav({ user, onLogout }) {
 }
 
 function Hero() {
+  const { t } = useLanguage();
   const [storyIndex, setStoryIndex] = useState(0);
   const story = HERO_STORIES[storyIndex];
   useEffect(() => {
@@ -451,19 +449,18 @@ function Hero() {
       </div>
       <div className="hero__overlay" />
       <div className="hero__content">
-        <span className="pill">✦ The social network for history lovers</span>
+        <span className="pill">✦ {t("The social network for history lovers")}</span>
         <h1>
-          Every moment ever lived.
+          {t("Every moment ever lived.")}
           <br />
-          <em>One story at a time.</em>
+          <em>{t("One story at a time.")}</em>
         </h1>
         <p>
-          Post history events with text, images, and video. Explore them on a living timeline
-          or read them like a book. Join a community that can't stop learning.
+          {t("Post history events with text, images, and video. Explore them on a living timeline or read them like a book. Join a community that can't stop learning.")}
         </p>
         <div className="hero__buttons">
-          <a href="/register" className="btn btn--gold btn--lg">Start exploring — it's free</a>
-          <a href="#how-it-works" className="btn btn--outline btn--lg">▶ See how it works</a>
+          <a href="/register" className="btn btn--gold btn--lg">{t("Start exploring — it's free")}</a>
+          <a href="#how-it-works" className="btn btn--outline btn--lg">▶ {t("See how it works")}</a>
         </div>
         <div className="hero__proof">
           <div className="avatars">
@@ -724,32 +721,6 @@ function FooterInformation() {
         <p>Chronicle is a community for people who love history. Share the moments that shaped our world, explore them through a living timeline, and read stories in a book-inspired format.</p>
         <a className="footer-info__link" href="#how-it-works">See how it works <span aria-hidden="true">→</span></a>
       </section>
-      <section id="faq" className="footer-info__block reveal">
-        <span className="eyebrow">Quick answers</span>
-        <h2>Frequently asked questions</h2>
-        <details>
-          <summary>Is Chronicle free to join?</summary>
-          <p>Yes. You can create an account and explore Chronicle for free.</p>
-        </details>
-        <details>
-          <summary>How do I create an account?</summary>
-          <p>Choose “Start exploring” or “Join free,” then register with your name, email, and password. Google sign-in is also available when configured.</p>
-        </details>
-        <details>
-          <summary>Can I share photos and video?</summary>
-          <p>Stories support text and media. Upload availability depends on the service configuration.</p>
-        </details>
-      </section>
-      <section id="policies" className="footer-info__block reveal">
-        <span className="eyebrow">Using Chronicle</span>
-        <h2>Terms &amp; community policy</h2>
-        <h3>Using the service</h3>
-        <p>Use Chronicle respectfully, share content you have permission to post, and credit your historical sources. Do not misuse the service or post material that violates community standards. Chronicle may moderate content that does not meet these standards.</p>
-        <h3>Your account and privacy</h3>
-        <p>Chronicle uses your name and email to provide your account. Keep your password private, and avoid putting sensitive personal information in public stories or comments.</p>
-        <h3>Community standards</h3>
-        <p>Share respectful, relevant history content. Credit sources, distinguish evidence from opinion, and do not post material you do not have permission to share. Content shared in the community may be visible to other visitors.</p>
-      </section>
     </div>
   );
 }
@@ -771,18 +742,21 @@ function Footer() {
       <div className="footer__group">
         <strong>Chronicle</strong>
         <a href="#about">About</a>
-        <a href="#faq">FAQ</a>
+        <a href="/faq">FAQ</a>
         <a href="/register">Join free</a>
       </div>
       <div className="footer__group">
         <strong>Policies</strong>
-        <a href="#policies">Terms, privacy &amp; community policy</a>
+        <a href="/terms">Terms of service</a>
+        <a href="/privacy">Privacy policy</a>
+        <a href="/community-policy">Community policy</a>
       </div>
     </footer>
   );
 }
 
 export default function App() {
+  useSiteLocalization();
   const [route, setRoute] = useState(window.location.pathname);
   const [authWarning, setAuthWarning] = useState("");
   const [authChecked, setAuthChecked] = useState(() => !localStorage.getItem("chronicle_token"));
@@ -871,6 +845,8 @@ export default function App() {
   }, []);
   const authModes = { "/login": "login", "/register": "register", "/forgot-password": "forgot", "/reset-password": "reset" };
   const requestedReset = new URLSearchParams(window.location.search).get("token") || new URLSearchParams(window.location.search).get("reset") || "";
+  const resourceTypes = { "/faq": "faq", "/terms": "terms", "/privacy": "privacy", "/community-policy": "community-policy" };
+  if (resourceTypes[route]) return <ResourcePage type={resourceTypes[route]} />;
   const historyEventId = route.startsWith("/history/") ? route.slice("/history/".length) : "";
   if (historyEventId) {
     return (
